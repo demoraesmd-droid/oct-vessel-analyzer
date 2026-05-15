@@ -12,14 +12,14 @@ export const config = {
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6'; // vision-capable; cheap enough per call
 
-const SYSTEM_PROMPT = `You are reading values from an ophthalmic OCT report screenshot. You will be shown three image regions from the same report:
+const SYSTEM_PROMPT = `You are an OCR extraction tool. Your ONLY job is to output valid JSON that exactly matches the schema. Never write explanations, markdown, or commentary.
 
-1. The clock-hour pie chart showing RNFL thickness values in µm, with 12 numbers arranged clockwise around a colored circle.
-2. The optic disc parameters box showing labeled values: RA (mm²), DA (mm²), LCDR, VCDR, CV (mm³), @RPH (µm).
-3. The top header strip showing patient ID, name, DOB, exam date, and image quality.
+You will be shown three image regions from an ophthalmic OCT report:
+1. The clock-hour pie chart — 12 RNFL thickness numbers (µm) arranged clockwise around a colored circle.
+2. The optic disc parameters box — labeled values: RA (mm²), DA (mm²), LCDR, VCDR, CV (mm³), @RPH (µm).
+3. The top header strip — patient ID, name, DOB, exam date, image quality, and the eye marker "OD(R)" or "OS(L)".
 
-Return ONLY a valid JSON object — no markdown, no commentary, no code fences. Structure:
-
+Output schema (exactly this structure):
 {
   "eye": "OD" or "OS",
   "clockHours": { "1": <int>, "2": <int>, "3": <int>, "4": <int>, "5": <int>, "6": <int>, "7": <int>, "8": <int>, "9": <int>, "10": <int>, "11": <int>, "12": <int> },
@@ -28,12 +28,12 @@ Return ONLY a valid JSON object — no markdown, no commentary, no code fences. 
 }
 
 Rules:
-- All clock-hour values are integers 20–250 µm. If a value is unreadable, use null.
-- Eye laterality: the pie chart appears the same regardless of eye — derive eye from the header strip ("OD(R)" or "OS(L)" prefix) if present. If header strip absent or unclear, return "OD" as default.
-- Patient name: as written. DOB and exam date: as written (preserve format).
-- Image quality: integer if shown, else null.
-- Disc parameters: null if not visible.
-- Output JSON only. No preamble, no markdown, no commentary.`;
+- Clock-hour values are integers 20–250 µm. If unreadable, use null.
+- Eye: read from the header strip ("OD" or "OS"). Default "OD" if absent.
+- Disc parameters: null if missing.
+- Image quality: integer (e.g. 61) or null.
+
+ABSOLUTE RULE: Output ONLY the JSON object. Start your response with "{" and end with "}". No prose, no markdown fences, no explanations. Any characters outside the JSON will cause the system to fail.`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -85,7 +85,11 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content }]
+        messages: [
+          { role: 'user', content },
+          // Prefill the assistant turn with "{" — Claude is constrained to continue as JSON.
+          { role: 'assistant', content: '{' }
+        ]
       })
     });
 
@@ -100,15 +104,26 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: 'No text content returned from Claude' });
     }
 
-    // Strip any markdown code fences just in case the model added them
-    let raw = textBlock.text.trim();
+    // Reattach the "{" prefill, strip any markdown fences just in case
+    let raw = ('{' + textBlock.text).trim();
     raw = raw.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+
+    // Truncate after the matching closing brace to discard any trailing prose
+    raw = extractJSONObject(raw);
 
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (e) {
-      return res.status(502).json({ error: `Could not parse Claude response as JSON: ${e.message}`, raw: raw.slice(0, 500) });
+      // Last-resort salvage: try to parse a JSON object from anywhere in the raw text
+      const salvaged = salvageJSON(textBlock.text);
+      if (salvaged) {
+        return res.status(200).json(salvaged);
+      }
+      return res.status(502).json({
+        error: `Could not parse Claude response as JSON: ${e.message}`,
+        raw: raw.slice(0, 500)
+      });
     }
 
     return res.status(200).json(parsed);
@@ -121,4 +136,60 @@ function stripDataUrlPrefix(s) {
   if (!s) return s;
   const m = s.match(/^data:image\/[a-z]+;base64,(.+)$/);
   return m ? m[1] : s;
+}
+
+// Extract just the first balanced JSON object from a string — discard anything after closing brace
+function extractJSONObject(s) {
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (esc) { esc = false; continue; }
+    if (c === '\\' && inStr) { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return s.slice(0, i + 1);
+    }
+  }
+  return s;
+}
+
+// Last-ditch salvage: parse markdown-formatted output by extracting key:value patterns
+function salvageJSON(text) {
+  try {
+    const result = { eye: 'OD', clockHours: {}, discParams: {}, patient: {} };
+
+    // Clock-hour values: look for patterns like "12: 138" or "- 12: 138" or "12. 138"
+    for (let c = 1; c <= 12; c++) {
+      const re = new RegExp(`(?:^|\\s|-|\\*)\\s*${c}\\s*[:.\\)]\\s*(\\d{2,3})`, 'm');
+      const m = text.match(re);
+      if (m) {
+        const v = parseInt(m[1], 10);
+        if (v >= 20 && v <= 250) result.clockHours[c] = v;
+      }
+    }
+    if (Object.keys(result.clockHours).length < 8) return null;  // not enough data salvaged
+
+    // Disc params
+    const findNum = (label, re) => {
+      const m = text.match(re);
+      return m ? parseFloat(m[1]) : null;
+    };
+    result.discParams.RA = findNum('RA', /RA[^:\d]{0,10}([\d.]+)/i);
+    result.discParams.DA = findNum('DA', /DA[^:\d]{0,10}([\d.]+)/i);
+    result.discParams.LCDR = findNum('LCDR', /LCDR[^:\d]{0,10}([\d.]+)/i);
+    result.discParams.VCDR = findNum('VCDR', /VCDR[^:\d]{0,10}([\d.]+)/i);
+    result.discParams.CV = findNum('CV', /CV[^:\d]{0,10}([\d.]+)/i);
+    result.discParams.RPH = findNum('RPH', /RPH[^:\d]{0,10}([\d.]+)/i);
+
+    // Eye
+    if (/\bOS\b|\bOS\(L\)/.test(text)) result.eye = 'OS';
+    else if (/\bOD\b|\bOD\(R\)/.test(text)) result.eye = 'OD';
+
+    return result;
+  } catch (e) {
+    return null;
+  }
 }
