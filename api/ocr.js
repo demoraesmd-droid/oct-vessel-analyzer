@@ -85,11 +85,7 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content },
-          // Prefill the assistant turn with "{" — Claude is constrained to continue as JSON.
-          { role: 'assistant', content: '{' }
-        ]
+        messages: [{ role: 'user', content }]
       })
     });
 
@@ -104,8 +100,8 @@ export default async function handler(req, res) {
       return res.status(502).json({ error: 'No text content returned from Claude' });
     }
 
-    // Reattach the "{" prefill, strip any markdown fences just in case
-    let raw = ('{' + textBlock.text).trim();
+    // Strip any markdown code fences just in case
+    let raw = textBlock.text.trim();
     raw = raw.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 
     // Truncate after the matching closing brace to discard any trailing prose
@@ -115,7 +111,7 @@ export default async function handler(req, res) {
     try {
       parsed = JSON.parse(raw);
     } catch (e) {
-      // Last-resort salvage: try to parse a JSON object from anywhere in the raw text
+      // Last-resort salvage: parse markdown-formatted output by extracting key:value patterns
       const salvaged = salvageJSON(textBlock.text);
       if (salvaged) {
         return res.status(200).json(salvaged);
