@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCT Peripapillary Vessel Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d1117; --bg-soft: #151b23; --bg-card: #1c2330;
+  --line: #2a3340; --line-bright: #3a4550;
+  --ink: #e6edf3; --ink-soft: #9ba8b6; --ink-faded: #6b7785;
+  --accent: #d4a373; --accent-bright: #e9c5a0;
+  --good: #7fb87f; --warn: #d4a55a; --bad: #c97676; --info: #6b9bd2;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--ink); font-family: 'Inter Tight', sans-serif; min-height: 100vh; }
+body { background-image: radial-gradient(ellipse at top left, rgba(212,163,115,0.04), transparent 50%), radial-gradient(ellipse at bottom right, rgba(107,155,210,0.03), transparent 50%); background-attachment: fixed; }
+.app { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
+header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 56px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 32px; letter-spacing: -0.02em; margin-bottom: 6px; }
+.brand h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
+.brand .subtitle { font-size: 13px; color: var(--ink-faded); letter-spacing: 0.04em; text-transform: uppercase; font-family: 'JetBrains Mono', monospace; }
+.version { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faded); text-align: right; }
+.version div:first-child { color: var(--ink-soft); }
+
+.dropzone { border: 1.5px dashed var(--line-bright); background: var(--bg-soft); border-radius: 6px; padding: 64px 32px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+.dropzone:hover, .dropzone.dragging { border-color: var(--accent); background: var(--bg-card); }
+.dropzone-icon { width: 64px; height: 64px; margin: 0 auto 24px; border: 1px solid var(--line-bright); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--ink-soft); transition: all 0.2s; }
+.dropzone:hover .dropzone-icon { border-color: var(--accent); color: var(--accent); }
+.dropzone h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 24px; margin-bottom: 12px; }
+.dropzone p { color: var(--ink-soft); font-size: 14px; line-height: 1.6; max-width: 540px; margin: 0 auto; }
+.dropzone code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--bg); padding: 2px 6px; border-radius: 3px; color: var(--accent-bright); }
+input[type="file"] { display: none; }
+
+.section { display: none; }
+.section.active { display: block; }
+.section + .section { margin-top: 48px; }
+
+.stages { display: grid; grid-template-columns: repeat(6, 1fr); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 24px; }
+.stage { padding: 18px 16px; border-right: 1px solid var(--line); position: relative; transition: all 0.3s; }
+.stage:last-child { border-right: none; }
+.stage .num { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-faded); letter-spacing: 0.1em; margin-bottom: 4px; }
+.stage .label { font-size: 13px; color: var(--ink-soft); line-height: 1.3; }
+.stage.done { background: rgba(127,184,127,0.04); }
+.stage.done .num { color: var(--good); }
+.stage.done .label { color: var(--ink); }
+.stage.active { background: rgba(212,163,115,0.06); }
+.stage.active .num { color: var(--accent); }
+.stage.active .label { color: var(--accent-bright); }
+.stage.active::after { content: ""; position: absolute; bottom: 0; left: 0; right: 0; height: 1.5px; background: linear-gradient(90deg, transparent, var(--accent), transparent); animation: scan 1.4s linear infinite; }
+@keyframes scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+.stage.error { background: rgba(201,118,118,0.05); }
+.stage.error .num { color: var(--bad); }
+
+.console { background: #0a0e14; border: 1px solid var(--line); border-radius: 6px; padding: 20px 24px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.7; max-height: 320px; overflow-y: auto; }
+.console-line { display: flex; gap: 12px; }
+.console-line .ts { color: var(--ink-faded); flex-shrink: 0; }
+.console-line .msg { color: var(--ink-soft); }
+.console-line.success .msg { color: var(--good); }
+.console-line.warn .msg { color: var(--warn); }
+.console-line.error .msg { color: var(--bad); }
+.console-line.info .msg { color: var(--info); }
+
+/* Review section */
+.review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.review-card { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
+.review-card h3 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 18px; margin-bottom: 16px; }
+.review-card p.note { color: var(--ink-faded); font-size: 12px; margin-bottom: 16px; }
+.preview-image { display: block; width: 100%; max-width: 100%; border-radius: 4px; background: #000; }
+
+.clock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px; margin-top: 16px; }
+.clock-item { display: flex; align-items: center; gap: 8px; }
+.clock-item .clock-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faded); width: 32px; text-align: right; }
+.clock-item input { width: 64px; background: var(--bg); border: 1px solid var(--line-bright); color: var(--ink); padding: 6px 10px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-align: center; transition: border-color 0.15s; }
+.clock-item input:focus { outline: none; border-color: var(--accent); }
+.clock-item input.warning { border-color: var(--warn); background: rgba(212,165,90,0.06); }
+.clock-item input.error-val { border-color: var(--bad); background: rgba(201,118,118,0.08); }
+.clock-item .unit { color: var(--ink-faded); font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+.params-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.param-item { display: flex; align-items: center; gap: 10px; }
+.param-item .param-label { font-size: 12px; color: var(--ink-soft); flex: 1; }
+.param-item input { width: 90px; background: var(--bg); border: 1px solid var(--line-bright); color: var(--ink); padding: 6px 10px; border-radius: 3px; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-align: right; }
+.param-item input:focus { outline: none; border-color: var(--accent); }
+
+.eye-row { display: flex; gap: 16px; align-items: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.eye-row label { font-size: 13px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.eye-row input[type="radio"] { margin: 0; accent-color: var(--accent); }
+
+/* Results */
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; }
+.metric { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; padding: 18px 22px; }
+.metric .label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-faded); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.metric .value { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; }
+.metric .unit { font-size: 13px; color: var(--ink-soft); margin-left: 4px; font-family: 'JetBrains Mono', monospace; font-weight: 400; }
+.metric .note { font-size: 12px; color: var(--ink-faded); margin-top: 6px; }
+
+.preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+.preview-card { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.preview-card .header { padding: 12px 18px; border-bottom: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faded); letter-spacing: 0.1em; text-transform: uppercase; display: flex; justify-content: space-between; }
+.preview-card .header .meta { color: var(--ink-soft); text-transform: none; letter-spacing: 0; }
+.preview-card canvas { display: block; width: 100%; background: #000; }
+
+.tables-section h3 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 18px; margin: 32px 0 16px 0; }
+.tables-section h3:first-child { margin-top: 0; }
+table { width: 100%; border-collapse: collapse; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; font-size: 13px; }
+table th, table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); }
+table th { background: var(--bg-card); font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-faded); letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; }
+table tbody tr:last-child td { border-bottom: none; }
+table .num-col { font-family: 'JetBrains Mono', monospace; text-align: right; }
+.badge-S { background: rgba(212,163,115,0.15); color: var(--accent-bright); padding: 2px 6px; border-radius: 2px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.badge-N { background: rgba(107,155,210,0.15); color: var(--info); padding: 2px 6px; border-radius: 2px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.badge-I { background: rgba(212,124,163,0.15); color: #d796b3; padding: 2px 6px; border-radius: 2px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.badge-T { background: rgba(127,184,127,0.15); color: var(--good); padding: 2px 6px; border-radius: 2px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+.thickness-cell { font-family: 'JetBrains Mono', monospace; font-weight: 500; padding: 6px 8px; text-align: center; border-radius: 2px; }
+.thickness-green { background: rgba(127,184,127,0.2); color: var(--good); }
+.thickness-yellow { background: rgba(212,165,90,0.2); color: var(--warn); }
+.thickness-red { background: rgba(201,118,118,0.25); color: #f0a8a8; }
+
+.actions { display: flex; gap: 12px; margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--line); align-items: center; justify-content: space-between; }
+.btn { background: var(--accent); color: #1a1410; border: none; padding: 14px 28px; border-radius: 4px; font-family: 'Inter Tight', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 8px; }
+.btn:hover { background: var(--accent-bright); transform: translateY(-1px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-ghost { background: transparent; color: var(--ink-soft); border: 1px solid var(--line-bright); }
+.btn-ghost:hover { background: var(--bg-soft); color: var(--ink); border-color: var(--accent); }
+
+.caveat { background: rgba(201,118,118,0.05); border-left: 2px solid var(--bad); padding: 12px 18px; margin: 24px 0; font-size: 13px; color: var(--ink-soft); border-radius: 0 4px 4px 0; }
+.caveat strong { color: var(--bad); display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+.review-alert { background: rgba(212,165,90,0.06); border-left: 2px solid var(--warn); padding: 14px 20px; border-radius: 0 4px 4px 0; margin-bottom: 24px; font-size: 13px; color: var(--ink-soft); }
+.review-alert strong { color: var(--warn); display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+
+footer { margin-top: 96px; padding-top: 32px; border-top: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-faded); display: flex; justify-content: space-between; align-items: center; }
+footer code { color: var(--ink-soft); }
+
+@media (max-width: 900px) {
+  .review-grid, .preview-grid { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+  .stages { grid-template-columns: repeat(3, 1fr); }
+  .stages .stage:nth-child(3) { border-right: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand">
+    <h1>OCT Vessel <em>Analyzer</em></h1>
+    <div class="subtitle">OCT Peripapillary RNFL & Vessel Quantification</div>
+  </div>
+  <div class="version">
+    <div>v0.1</div>
+    <div>client-side · no upload</div>
+  </div>
+</header>
+
+<!-- Section 1: Drop zone -->
+<div id="section-drop" class="section active">
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>
+      </svg>
+    </div>
+    <h2>Drop an OCT single-eye screenshot</h2>
+    <p>The full OCT report image — color fundus, red-free, B-scan, TSNIT plot, parameters box, and clock-hour pie chart all visible. PNG or JPG. Expected dimensions around <code>1920 × 953</code>.</p>
+    <input type="file" id="file-input" accept="image/*,.jfif,.jpe,.jif,.jfi">
+  </div>
+</div>
+
+<!-- Section 2: Pipeline progress -->
+<div id="section-pipeline" class="section">
+  <div class="stages">
+    <div class="stage" data-stage="parse"><div class="num">01</div><div class="label">Parse panels</div></div>
+    <div class="stage" data-stage="circle"><div class="num">02</div><div class="label">Fit circle</div></div>
+    <div class="stage" data-stage="ocr"><div class="num">03</div><div class="label">Read text (OCR)</div></div>
+    <div class="stage" data-stage="review"><div class="num">04</div><div class="label">Verify inputs</div></div>
+    <div class="stage" data-stage="vessels"><div class="num">05</div><div class="label">Detect vessels</div></div>
+    <div class="stage" data-stage="report"><div class="num">06</div><div class="label">Compose report</div></div>
+  </div>
+  <div class="console" id="console"></div>
+</div>
+
+<!-- Section 3: Review -->
+<div id="section-review" class="section">
+  <div class="review-alert">
+    <strong>⚙ Verify inputs</strong>
+    OCR has best-effort read the values below. Please scan through them and correct anything wrong before generating the report. Values flagged in yellow had low OCR confidence; values in red couldn't be read.
+  </div>
+  <div class="review-grid">
+    <div class="review-card">
+      <h3>Clock-hour RNFL values</h3>
+      <p class="note">Compare against the pie chart on the right. Values are in µm.</p>
+      <div class="clock-grid" id="clock-inputs"></div>
+      <div class="eye-row">
+        <span style="font-size: 12px; color: var(--ink-soft);">Eye:</span>
+        <label><input type="radio" name="eye" value="OD" id="eye-od"> OD (Right)</label>
+        <label><input type="radio" name="eye" value="OS" id="eye-os"> OS (Left)</label>
+      </div>
+    </div>
+    <div class="review-card">
+      <h3 style="margin-bottom: 12px;">Pie chart reference</h3>
+      <canvas id="pie-preview" class="preview-image"></canvas>
+    </div>
+  </div>
+  <div class="review-grid" style="margin-top: 20px;">
+    <div class="review-card">
+      <h3>Optic disc parameters</h3>
+      <p class="note">From the parameters panel in the OCT report.</p>
+      <div class="params-grid">
+        <div class="param-item"><span class="param-label">Rim Area (mm²)</span><input id="param-RA" type="text"></div>
+        <div class="param-item"><span class="param-label">Disc Area (mm²)</span><input id="param-DA" type="text"></div>
+        <div class="param-item"><span class="param-label">LCDR</span><input id="param-LCDR" type="text"></div>
+        <div class="param-item"><span class="param-label">VCDR</span><input id="param-VCDR" type="text"></div>
+        <div class="param-item"><span class="param-label">Cup Volume (mm³)</span><input id="param-CV" type="text"></div>
+        <div class="param-item"><span class="param-label">@RPH (µm)</span><input id="param-RPH" type="text"></div>
+      </div>
+    </div>
+    <div class="review-card">
+      <h3>Patient info</h3>
+      <p class="note">Optional — leave blank to omit from report.</p>
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+        <div class="param-item" style="grid-template-columns: auto 1fr;">
+          <span class="param-label" style="flex: 0 0 110px;">Patient name</span>
+          <input id="param-name" type="text" style="width: 100%; text-align: left;">
+        </div>
+        <div class="param-item" style="grid-template-columns: auto 1fr;">
+          <span class="param-label" style="flex: 0 0 110px;">DOB</span>
+          <input id="param-dob" type="text" style="width: 100%; text-align: left;" placeholder="DD/MM/YYYY">
+        </div>
+        <div class="param-item" style="grid-template-columns: auto 1fr;">
+          <span class="param-label" style="flex: 0 0 110px;">Exam date</span>
+          <input id="param-examdate" type="text" style="width: 100%; text-align: left;" placeholder="DD/MM/YYYY">
+        </div>
+        <div class="param-item" style="grid-template-columns: auto 1fr;">
+          <span class="param-label" style="flex: 0 0 110px;">Image quality</span>
+          <input id="param-iq" type="text" style="width: 100%; text-align: left;">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-ghost btn" id="cancel-review">↻ Start over</button>
+    <button class="btn" id="confirm-review">Continue → Detect vessels</button>
+  </div>
+</div>
+
+<!-- Section 4: Results -->
+<div id="section-results" class="section">
+  <div class="metrics" id="metrics"></div>
+  <div id="caveat-container"></div>
+  <div class="preview-grid">
+    <div class="preview-card">
+      <div class="header"><span>Annotated Red-Free</span><span class="meta" id="rf-meta"></span></div>
+      <canvas id="rf-canvas"></canvas>
+    </div>
+    <div class="preview-card">
+      <div class="header"><span>Annotated B-scan</span><span class="meta" id="bs-meta"></span></div>
+      <canvas id="bs-canvas"></canvas>
+    </div>
+  </div>
+  <div class="tables-section">
+    <h3>Clock-hour RNFL</h3>
+    <div id="clock-table"></div>
+    <h3>Quadrant summary</h3>
+    <div id="quad-table"></div>
+    <h3>Vessel detail</h3>
+    <div id="vessel-table"></div>
+  </div>
+  <div class="actions">
+    <button class="btn-ghost btn" id="reset-btn">↻ New scan</button>
+    <button class="btn" id="download-btn">↓ Download DOCX report</button>
+  </div>
+</div>
+
+<footer>
+  <div>OCT Vessel Analyzer — runs entirely in your browser</div>
+  <div><code>Research / clinical decision support · Not a diagnostic device</code></div>
+</footer>
+</div>
+
+<script>
+// =====================================================================
+// OCT Peripapillary Vessel Analyzer — main pipeline
+// =====================================================================
+
+const SCAN_RADIUS_UM = 1730;
+const ARC_PER_QUADRANT = (2 * Math.PI * SCAN_RADIUS_UM) / 4;
+
+// Reference image dimensions for which the PANELS coordinates were calibrated.
+// Real images are scaled proportionally to match this reference at runtime.
+const REFERENCE_WIDTH = 1920;
+const REFERENCE_HEIGHT = 953;
+
+// Panel coordinates calibrated for 1920×953 single-eye OCT export
+const PANELS = {
+  redfree:  { x: 20,   y: 540, w: 640, h: 385 },
+  bscan:    { x: 700,  y: 105, w: 1200, h: 220 },
+  pie:      { x: 1610, y: 615, w: 310, h: 305 },  // widened to capture clock-3 label
+  tsnit:    { x: 660,  y: 365, w: 1240, h: 235 },
+  params:   { x: 480,  y: 350, w: 165, h: 145 }
+};
+
+// =====================================================================
+// UI helpers
+// =====================================================================
+const $ = id => document.getElementById(id);
+const consoleEl = $('console');
+const stagesEl = document.querySelectorAll('.stage');
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function ts() { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function log(msg, type = '') {
+  const line = document.createElement('div');
+  line.className = `console-line ${type}`;
+  line.innerHTML = `<span class="ts">${ts()}</span><span class="msg">${msg}</span>`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+function setStage(name, state) {
+  stagesEl.forEach(el => {
+    if (el.dataset.stage === name) {
+      el.classList.remove('active', 'done', 'error');
+      if (state) el.classList.add(state);
+    }
+  });
+}
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  $(`section-${id}`).classList.add('active');
+}
+
+// =====================================================================
+// Image utilities
+// =====================================================================
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) { reject(new Error('No file provided')); return; }
+    if (file.size === 0) { reject(new Error('File is empty (0 bytes)')); return; }
+    if (file.size > 50 * 1024 * 1024) { reject(new Error(`File too large (${(file.size/1024/1024).toFixed(1)} MB) — maximum 50 MB`)); return; }
+
+    // Use FileReader → data URL. More tolerant than URL.createObjectURL for files
+    // with non-standard MIME types or extensions like .jfif (Windows JPEG variant).
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Failed to read file: ${reader.error?.message || 'unknown FileReader error'}`));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error(
+        `Browser couldn't decode image. File: ${file.name}, type: ${file.type || '(none)'}, size: ${(file.size/1024).toFixed(0)} KB. ` +
+        `Try saving the screenshot as PNG or JPG. JFIF and other non-standard formats may not be supported.`
+      ));
+      img.onload = () => resolve(img);
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function imageToCanvas(img, w, h) {
+  const c = document.createElement('canvas');
+  c.width = w || img.width;
+  c.height = h || img.height;
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+function cropCanvas(srcCanvas, x, y, w, h) {
+  x = Math.max(0, Math.min(x, srcCanvas.width));
+  y = Math.max(0, Math.min(y, srcCanvas.height));
+  w = Math.min(w, srcCanvas.width - x);
+  h = Math.min(h, srcCanvas.height - y);
+  // Guard: never create a zero-dimension canvas (causes getImageData to throw)
+  if (w < 1 || h < 1) {
+    throw new Error(`Panel crop produced empty region (${w}×${h} at ${x},${y}). Image may be smaller than expected (${srcCanvas.width}×${srcCanvas.height} vs expected ~1920×953).`);
+  }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(srcCanvas, x, y, w, h, 0, 0, w, h);
+  return c;
+}
+function getImageData(canvas) { return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height); }
+function rgbAt(d, x, y) { const i = (y * d.width + x) * 4; return [d.data[i], d.data[i+1], d.data[i+2]]; }
+function grayAt(d, x, y) { const [r, g, b] = rgbAt(d, x, y); return (r + g + b) / 3; }
+
+// Compute a scale factor from the actual image to the reference 1920×953 layout.
+// Returns the scale (1.0 if dimensions match) and warns if aspect ratio differs significantly.
+function detectImageScale(srcCanvas) {
+  const wScale = srcCanvas.width / REFERENCE_WIDTH;
+  const hScale = srcCanvas.height / REFERENCE_HEIGHT;
+  const refAspect = REFERENCE_WIDTH / REFERENCE_HEIGHT;
+  const actualAspect = srcCanvas.width / srcCanvas.height;
+  const aspectDiff = Math.abs(actualAspect - refAspect) / refAspect;
+  return {
+    wScale, hScale,
+    avgScale: (wScale + hScale) / 2,
+    aspectMatch: aspectDiff < 0.02  // within 2% — same layout, just scaled
+  };
+}
+
+// Return panel coordinates scaled for the current image. Use this everywhere instead of PANELS directly.
+function getPanel(name, scale) {
+  const p = PANELS[name];
+  return {
+    x: Math.round(p.x * scale.wScale),
+    y: Math.round(p.y * scale.hScale),
+    w: Math.round(p.w * scale.wScale),
+    h: Math.round(p.h * scale.hScale)
+  };
+}
+
+// =====================================================================
+// Eye laterality
+// =====================================================================
+function detectEyeLaterality(srcCanvas, scale) {
+  // Brightest pooled region in color fundus determines disc location
+  const cx0 = Math.round(20 * scale.wScale);
+  const cy0 = Math.round(100 * scale.hScale);
+  const cw = Math.round(640 * scale.wScale);
+  const ch = Math.round(440 * scale.hScale);
+  const colorFundus = cropCanvas(srcCanvas, cx0, cy0, cw, ch);
+  const data = getImageData(colorFundus);
+  const w = data.width, h = data.height;
+  const pool = Math.max(15, Math.round(30 * scale.avgScale));
+  const ph = Math.floor(h / pool), pw = Math.floor(w / pool);
+  let maxLum = 0, maxX = 0;
+  for (let py = 1; py < ph - 1; py++) {
+    for (let px = 1; px < pw - 1; px++) {
+      let sum = 0;
+      for (let dy = 0; dy < pool; dy++) {
+        for (let dx = 0; dx < pool; dx++) {
+          const [r, g, b] = rgbAt(data, px * pool + dx, py * pool + dy);
+          sum += (r + g + b) / 3;
+        }
+      }
+      const avg = sum / (pool * pool);
+      if (avg > maxLum) { maxLum = avg; maxX = px * pool + pool / 2; }
+    }
+  }
+  return maxX > w / 2 ? 'OD' : 'OS';
+}
+
+// =====================================================================
+// Circle fit from green pixels
+// =====================================================================
+function fitCircleFromGreen(canvas) {
+  const data = getImageData(canvas);
+  const w = data.width, h = data.height;
+  const xs = [], ys = [];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [r, g, b] = rgbAt(data, x, y);
+      if (g - r > 20 && g - b > 20 && g > 70) { xs.push(x); ys.push(y); }
+    }
+  }
+  if (xs.length < 30) return null;
+  const N = xs.length;
+  let SXX=0, SXY=0, SX=0, SYY=0, SY=0, SR=0, SXR=0, SYR=0;
+  for (let i = 0; i < N; i++) {
+    const x = xs[i], y = ys[i], r2 = x*x + y*y;
+    SXX += x*x; SXY += x*y; SX += x;
+    SYY += y*y; SY += y;
+    SXR += x*r2; SYR += y*r2; SR += r2;
+  }
+  const sol = solve3x3([[SXX,SXY,SX],[SXY,SYY,SY],[SX,SY,N]], [SXR,SYR,SR]);
+  if (!sol) return null;
+  const cx = sol[0]/2, cy = sol[1]/2;
+  const r = Math.sqrt(sol[2] + cx*cx + cy*cy);
+  if (!isFinite(r) || r < 30 || r > 200) return null;
+  return { cx, cy, r, scale: SCAN_RADIUS_UM / r, nGreen: N };
+}
+function solve3x3(M, v) {
+  const A = M.map((row, i) => [...row, v[i]]);
+  for (let i = 0; i < 3; i++) {
+    let max = Math.abs(A[i][i]); let maxRow = i;
+    for (let k = i+1; k < 3; k++) {
+      if (Math.abs(A[k][i]) > max) { max = Math.abs(A[k][i]); maxRow = k; }
+    }
+    if (max < 1e-10) return null;
+    [A[i], A[maxRow]] = [A[maxRow], A[i]];
+    for (let k = 0; k < 3; k++) {
+      if (k === i) continue;
+      const factor = A[k][i] / A[i][i];
+      for (let j = i; j < 4; j++) A[k][j] -= factor * A[i][j];
+    }
+  }
+  return [A[0][3]/A[0][0], A[1][3]/A[1][1], A[2][3]/A[2][2]];
+}
+
+// =====================================================================
+// OCR — calls /api/ocr (Claude vision) instead of running Tesseract locally
+// =====================================================================
+
+function canvasToBase64(canvas) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    }, 'image/png');
+  });
+}
+
+// Single API call that extracts everything: clock-hour values, disc parameters, header info, eye.
+// Sends panel crops (small, ~50-200 KB each) instead of the full screenshot.
+async function callOCRAPI(srcCanvas, scale) {
+  const pieP = getPanel('pie', scale);
+  const paramsP = getPanel('params', scale);
+
+  const pieCanvas = cropCanvas(srcCanvas, pieP.x, pieP.y, pieP.w, pieP.h);
+  const paramsCanvas = cropCanvas(srcCanvas, paramsP.x, paramsP.y, paramsP.w, paramsP.h);
+  // Header: scaled top strip with patient ID, name, DOB
+  const hx = Math.round(0 * scale.wScale);
+  const hy = Math.round(0 * scale.hScale);
+  const hw = Math.round(1920 * scale.wScale);
+  const hh = Math.round(35 * scale.hScale);
+  const headerCanvas = cropCanvas(srcCanvas, hx, hy, hw, hh);
+
+  const [pieB64, paramsB64, headerB64] = await Promise.all([
+    canvasToBase64(pieCanvas),
+    canvasToBase64(paramsCanvas),
+    canvasToBase64(headerCanvas)
+  ]);
+
+  log('Calling Claude vision API to read values...', 'info');
+  const res = await fetch('/api/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pieB64, paramsB64, headerB64 })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`OCR API ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (data.error) throw new Error(`OCR API error: ${data.error}`);
+
+  return { ocrResult: data, pieCanvas };
+}
+
+// =====================================================================
+// Vessel detection (B-scan with red-free fallback)
+// =====================================================================
+function detectBscanShadows(srcCanvas, scale) {
+  const bsP = getPanel('bscan', scale);
+  const bsRaw = cropCanvas(srcCanvas, bsP.x, bsP.y, bsP.w, bsP.h);
+  // Fixed margin clip — scale margin sizes too: skip "Layers" label on left, "Image Quality" on right
+  const leftMargin = Math.round(30 * scale.wScale);
+  const rightMargin = Math.round(20 * scale.wScale);
+  const topMargin = Math.round(5 * scale.hScale);
+  const bottomMargin = Math.round(5 * scale.hScale);
+  const bs = cropCanvas(bsRaw, leftMargin, topMargin, bsRaw.width - leftMargin - rightMargin, bsRaw.height - topMargin - bottomMargin);
+  const bsData = getImageData(bs);
+  const W = bs.width, H = bs.height;
+  const yStart = Math.floor(H * 0.45);
+  const colMean = new Array(W).fill(0);
+  for (let x = 0; x < W; x++) {
+    let s = 0;
+    for (let y = yStart; y < H; y++) s += grayAt(bsData, x, y);
+    colMean[x] = s / (H - yStart);
+  }
+  const cm = boxcar(colMean, 7);
+  const peakDist = Math.max(8, Math.round(15 * scale.wScale));
+  const bgWin = Math.max(15, Math.round(30 * scale.wScale));
+  const peaks = findPeaks(cm.map(v => -v), { prominence: 4, distance: peakDist });
+  const candidates = peaks.map(p => {
+    const lo = Math.max(0, p - bgWin), hi = Math.min(W, p + bgWin);
+    const win = cm.slice(lo, hi);
+    const bg = percentile(win, 90);
+    const dip = cm[p];
+    const contrast = bg > 0 ? (bg - dip) / bg : 0;
+    return { idx: p, frac: p / W, dip, bg, contrast };
+  });
+  const strong = candidates.filter(c => c.contrast >= 0.15);
+  const arcScale = (2 * Math.PI * SCAN_RADIUS_UM) / W;
+  return { canvas: bs, candidates, strong, W, H, arcScale, colMean: cm };
+}
+
+function detectRedFreeVessels(rfCanvas, circle) {
+  const { cx, cy, r } = circle;
+  const data = getImageData(rfCanvas);
+  const w = data.width, h = data.height;
+  // Green mask
+  const greenMask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const [R, G, B] = rgbAt(data, x, y);
+      if (G - R > 20 && G - B > 20 && G > 70) greenMask[y * w + x] = 1;
+    }
+  }
+  const N = 720;
+  const profile = new Array(N).fill(NaN);
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * 2 * Math.PI;
+    let sum = 0, n = 0;
+    for (let dr = -2.5; dr <= 2.5; dr += 1.0) {
+      const x = Math.round(cx + (r + dr) * Math.cos(a));
+      const y = Math.round(cy + (r + dr) * Math.sin(a));
+      if (x >= 0 && x < w && y >= 0 && y < h && !greenMask[y * w + x]) {
+        sum += grayAt(data, x, y); n++;
+      }
+    }
+    if (n > 0) profile[i] = sum / n;
+  }
+  // Fill NaN
+  for (let i = 0; i < N; i++) {
+    if (isNaN(profile[i])) {
+      for (let d = 1; d < N / 2; d++) {
+        const a = profile[(i + d) % N];
+        if (!isNaN(a)) { profile[i] = a; break; }
+      }
+    }
+  }
+  const profS = boxcarCircular(profile, 5);
+  const peaks = findPeaksCircular(profS.map(v => -v), { prominence: 4, distance: 8 });
+  const candidates = peaks.map(p => {
+    const win = [];
+    for (let j = -20; j <= 20; j++) {
+      if (Math.abs(j) > 5) win.push(profS[(p + j + N) % N]);
+    }
+    const bg = percentile(win, 90);
+    const dip = profS[p];
+    const contrast = bg > 0 ? (bg - dip) / bg : 0;
+    return { idx: p, angle: (p / N) * 360, dip, bg, contrast };
+  });
+  candidates.sort((a, b) => a.angle - b.angle);
+  const strong = candidates.filter(c => c.contrast >= 0.15);
+  return { profile: profS, candidates, strong };
+}
+
+function measureVesselDiameter(rfCanvas, circle, angleDeg, halfLenPx = 12) {
+  const { cx, cy, r } = circle;
+  const data = getImageData(rfCanvas);
+  const w = data.width, h = data.height;
+  const a = angleDeg * Math.PI / 180;
+  const tx = -Math.sin(a), ty = Math.cos(a);
+  const samples = new Array(2 * halfLenPx + 1).fill(NaN);
+  for (let s = -halfLenPx; s <= halfLenPx; s++) {
+    let sum = 0, n = 0;
+    for (let dr = -3; dr <= 3; dr += 1.0) {
+      const x = Math.round(cx + (r + dr) * Math.cos(a) + s * tx);
+      const y = Math.round(cy + (r + dr) * Math.sin(a) + s * ty);
+      if (x >= 0 && x < w && y >= 0 && y < h) { sum += grayAt(data, x, y); n++; }
+    }
+    if (n > 0) samples[s + halfLenPx] = sum / n;
+  }
+  const sm = boxcar(samples, 3);
+  const N = sm.length, cen = Math.floor(N / 2);
+  let minIdx = cen, minVal = sm[cen];
+  for (let i = Math.max(0, cen - 3); i < Math.min(N, cen + 4); i++) {
+    if (sm[i] < minVal) { minVal = sm[i]; minIdx = i; }
+  }
+  let L = minIdx;
+  while (L > 0 && sm[L - 1] >= sm[L]) L--;
+  while (L > 0 && sm[L - 1] > sm[L]) L--;
+  let R = minIdx;
+  while (R < N - 1 && sm[R + 1] >= sm[R]) R++;
+  while (R < N - 1 && sm[R + 1] > sm[R]) R++;
+  const bg = Math.min(sm[L], sm[R]);
+  const dip = sm[minIdx];
+  if (bg <= dip) return null;
+  const half = (bg + dip) / 2;
+  let Lh = minIdx; while (Lh > 0 && sm[Lh] < half) Lh--;
+  let Rh = minIdx; while (Rh < N - 1 && sm[Rh] < half) Rh++;
+  return { fwhmPx: Rh - Lh, contrast: (bg - dip) / bg };
+}
+
+function measureBscanDiameter(colMean, idx, W, bgwin = 15) {
+  const lo = Math.max(0, idx - bgwin), hi = Math.min(W, idx + bgwin);
+  const bg = percentile(colMean.slice(lo, hi), 90);
+  const dip = colMean[idx];
+  if (bg <= dip) return null;
+  const half = (bg + dip) / 2;
+  let L = idx; while (L > 0 && colMean[L] < half) L--;
+  let R = idx; while (R < W - 1 && colMean[R] < half) R++;
+  return { fwhmPx: R - L, contrast: (bg - dip) / bg };
+}
+
+function bscanFracToAngle(frac, eye) {
+  // B-scan convention: peripapillary circle unrolled N → S → T → I → N (frac 0 to 1).
+  // Image-space angle (y-down): 0°=right, 90°=down, 180°=left, 270°=up.
+  // OD (no mirror): N=right(0°), S=top(270°), T=left(180°), I=bottom(90°). Counter-clockwise sweep.
+  //   Mapping: angle = (360 - frac*360) mod 360
+  // OS (mirrored): N=left(180°), S=top(270°), T=right(0°), I=bottom(90°). Clockwise sweep starting at 180°.
+  //   Mapping: angle = (180 + frac*360) mod 360
+  if (eye === 'OD') return (360 - frac * 360) % 360;
+  return (180 + frac * 360) % 360;
+}
+function angleToQuadrant(angleDeg, eye) {
+  if (eye === 'OD') {
+    if (angleDeg >= 45 && angleDeg < 135) return 'I';
+    if (angleDeg >= 135 && angleDeg < 225) return 'T';
+    if (angleDeg >= 225 && angleDeg < 315) return 'S';
+    return 'N';
+  } else {
+    if (angleDeg >= 45 && angleDeg < 135) return 'I';
+    if (angleDeg >= 135 && angleDeg < 225) return 'N';
+    if (angleDeg >= 225 && angleDeg < 315) return 'S';
+    return 'T';
+  }
+}
+
+// =====================================================================
+// Helpers
+// =====================================================================
+function boxcar(arr, size) {
+  const half = Math.floor(size / 2);
+  const out = new Array(arr.length);
+  for (let i = 0; i < arr.length; i++) {
+    let s = 0, n = 0;
+    for (let j = i - half; j <= i + half; j++) {
+      if (j >= 0 && j < arr.length && !isNaN(arr[j])) { s += arr[j]; n++; }
+    }
+    out[i] = n > 0 ? s / n : NaN;
+  }
+  return out;
+}
+function boxcarCircular(arr, size) {
+  const half = Math.floor(size / 2);
+  const N = arr.length;
+  const out = new Array(N);
+  for (let i = 0; i < N; i++) {
+    let s = 0, n = 0;
+    for (let j = -half; j <= half; j++) {
+      const v = arr[(i + j + N) % N];
+      if (!isNaN(v)) { s += v; n++; }
+    }
+    out[i] = n > 0 ? s / n : NaN;
+  }
+  return out;
+}
+function findPeaks(arr, opts = {}) {
+  const prominence = opts.prominence || 0;
+  const distance = opts.distance || 1;
+  const peaks = [];
+  for (let i = 1; i < arr.length - 1; i++) {
+    if (arr[i] > arr[i - 1] && arr[i] >= arr[i + 1]) {
+      const winSize = 25;
+      const lo = Math.max(0, i - winSize), hi = Math.min(arr.length, i + winSize + 1);
+      const localMin = Math.min(...arr.slice(lo, hi));
+      if (arr[i] - localMin >= prominence) {
+        if (peaks.length === 0 || i - peaks[peaks.length - 1] >= distance) peaks.push(i);
+        else if (arr[i] > arr[peaks[peaks.length - 1]]) peaks[peaks.length - 1] = i;
+      }
+    }
+  }
+  return peaks;
+}
+function findPeaksCircular(arr, opts = {}) {
+  const prominence = opts.prominence || 0;
+  const distance = opts.distance || 1;
+  const N = arr.length;
+  const padN = 50;
+  const padded = [];
+  for (let i = N - padN; i < N; i++) padded.push(arr[i]);
+  for (let i = 0; i < N; i++) padded.push(arr[i]);
+  for (let i = 0; i < padN; i++) padded.push(arr[i]);
+  const peaks = findPeaks(padded, { prominence, distance });
+  const result = new Set();
+  for (const p of peaks) {
+    const orig = p - padN;
+    if (orig >= 0 && orig < N) result.add(orig);
+  }
+  return [...result].sort((a, b) => a - b);
+}
+function percentile(arr, p) {
+  const sorted = [...arr].filter(v => !isNaN(v)).sort((a, b) => a - b);
+  if (sorted.length === 0) return 0;
+  const idx = Math.floor((p / 100) * (sorted.length - 1));
+  return sorted[idx];
+}
+
+// =====================================================================
+// Annotation
+// =====================================================================
+function annotateRedFree(rfCanvas, circle, vessels, eye) {
+  const c = document.createElement('canvas');
+  c.width = rfCanvas.width; c.height = rfCanvas.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(rfCanvas, 0, 0);
+  ctx.strokeStyle = '#ff00ff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(circle.cx, circle.cy, circle.r, 0, 2 * Math.PI);
+  ctx.stroke();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  for (const angDeg of [45, 135, 225, 315]) {
+    const a = angDeg * Math.PI / 180;
+    const x1 = circle.cx + (circle.r - 12) * Math.cos(a);
+    const y1 = circle.cy + (circle.r - 12) * Math.sin(a);
+    const x2 = circle.cx + (circle.r + 12) * Math.cos(a);
+    const y2 = circle.cy + (circle.r + 12) * Math.sin(a);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '14px sans-serif';
+  if (eye === 'OD') {
+    ctx.fillText('T', circle.cx - circle.r - 22, circle.cy + 5);
+    ctx.fillText('N', circle.cx + circle.r + 8, circle.cy + 5);
+  } else {
+    ctx.fillText('N', circle.cx - circle.r - 22, circle.cy + 5);
+    ctx.fillText('T', circle.cx + circle.r + 8, circle.cy + 5);
+  }
+  ctx.fillText('S', circle.cx - 4, circle.cy - circle.r - 12);
+  ctx.fillText('I', circle.cx - 4, circle.cy + circle.r + 18);
+  let i = 0;
+  for (const v of vessels) {
+    i++;
+    const a = v.angle * Math.PI / 180;
+    const x = circle.cx + circle.r * Math.cos(a);
+    const y = circle.cy + circle.r * Math.sin(a);
+    if (v.dUm !== null) {
+      // Yellow for B-scan-detected, magenta for red-free supplement
+      ctx.strokeStyle = v.source === 'redfree-supplement' ? '#ff66cc' : '#ffff00';
+      ctx.lineWidth = 2;
+      const L = 8;
+      ctx.beginPath();
+      ctx.moveTo(x - L * Math.cos(a), y - L * Math.sin(a));
+      ctx.lineTo(x + L * Math.cos(a), y + L * Math.sin(a));
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = '#ff5050'; ctx.lineWidth = 2;
+      const L = 5;
+      ctx.beginPath();
+      ctx.moveTo(x - L, y - L); ctx.lineTo(x + L, y + L);
+      ctx.moveTo(x - L, y + L); ctx.lineTo(x + L, y - L);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#00ffff';
+    ctx.font = '11px sans-serif';
+    ctx.fillText(String(i), x + 12 * Math.cos(a) - 4, y + 12 * Math.sin(a) + 4);
+  }
+  return c;
+}
+
+function annotateBscan(bsCanvas, vessels, mode, eye) {
+  const W = bsCanvas.width, H = bsCanvas.height;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H + 50;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(bsCanvas, 0, 0);
+  // B-scan unrolls peripapillary circle as N → S → T → I → N (frac 0 to 1).
+  const ranges = [
+    [0,     0.125, 'N', '#96c8ff'],
+    [0.125, 0.375, 'S', '#ffc864'],
+    [0.375, 0.625, 'T', '#b4ffb4'],
+    [0.625, 0.875, 'I', '#ff96c8'],
+    [0.875, 1.0,   'N', '#96c8ff']
+  ];
+  for (const [s, e, lbl, col] of ranges) {
+    ctx.fillStyle = col;
+    ctx.fillRect(s * W, 0, (e - s) * W, 8);
+    ctx.font = '11px sans-serif';
+    ctx.fillText(lbl, ((s + e) / 2) * W - 4, H + 20);
+  }
+  // Inverse of bscanFracToAngle to project red-free angles back onto B-scan x.
+  function angleToFrac(angle, eye) {
+    if (eye === 'OD') return ((360 - angle) % 360) / 360;
+    return (((angle - 180) + 360) % 360) / 360;
+  }
+
+  // Mark vessels: yellow solid lines for B-scan-detected; magenta dashed for red-free supplements
+  let i = 0;
+  let supplementCount = 0;
+  for (const v of vessels) {
+    i++;
+    if (v.idx !== undefined) {
+      // B-scan vessel: vertical yellow line at v.idx
+      const x = v.idx;
+      ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x, 8); ctx.lineTo(x, H); ctx.stroke();
+      ctx.fillStyle = '#ffff00'; ctx.font = '10px sans-serif';
+      ctx.fillText('#' + i, x + 2, 18);
+    } else if (eye) {
+      // Red-free supplement: project angle back to B-scan x with magenta dashed line
+      const frac = angleToFrac(v.angle, eye);
+      const x = Math.round(frac * W);
+      ctx.strokeStyle = '#ff66cc'; ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(x, 8); ctx.lineTo(x, H); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ff66cc'; ctx.font = '10px sans-serif';
+      ctx.fillText('#' + i, x + 2, 18);
+      supplementCount++;
+    }
+  }
+  if (mode === 'redfree') {
+    ctx.fillStyle = '#ffb4b4'; ctx.font = '11px sans-serif';
+    ctx.fillText('B-scan unreliable — using red-free for vessel detection', 20, H + 35);
+  } else if (supplementCount > 0) {
+    ctx.fillStyle = '#ff66cc'; ctx.font = '11px sans-serif';
+    ctx.fillText(`Dashed magenta = ${supplementCount} vessel(s) added from red-free in B-scan-weak regions`, 20, H + 35);
+  }
+  return c;
+}
+
+// =====================================================================
+// Main pipeline state
+// =====================================================================
+let state = {};
+
+async function runStage1to3(file) {
+  try {
+    consoleEl.innerHTML = '';
+    showSection('pipeline');
+
+    log(`Loading ${file.name} (${(file.size/1024).toFixed(0)} KB)`, 'info');
+    const img = await loadImage(file);
+    const srcCanvas = imageToCanvas(img);
+    state.srcCanvas = srcCanvas;
+    log(`Image: ${srcCanvas.width} × ${srcCanvas.height}`, 'info');
+
+    // Compute scale relative to reference 1920×953 layout
+    const scale = detectImageScale(srcCanvas);
+    state.scale = scale;
+    if (Math.abs(scale.avgScale - 1.0) > 0.02) {
+      log(`Image scale ${scale.avgScale.toFixed(3)}× reference (1920×953) — panels will be scaled proportionally`, 'info');
+    }
+    if (!scale.aspectMatch) {
+      log(`⚠ Aspect ratio differs from reference layout — panel positions may be misaligned. Expected ~2.01, got ${(srcCanvas.width/srcCanvas.height).toFixed(2)}.`, 'warn');
+    }
+
+    // Stage 1: Parse panels + eye laterality
+    setStage('parse', 'active');
+    const eye = detectEyeLaterality(srcCanvas, scale);
+    state.eye = eye;
+    log(`Detected eye: ${eye}`, 'success');
+    setStage('parse', 'done');
+
+    // Stage 2: Circle fit
+    setStage('circle', 'active');
+    const rfP = getPanel('redfree', scale);
+    const rfCanvas = cropCanvas(srcCanvas, rfP.x, rfP.y, rfP.w, rfP.h);
+    const circle = fitCircleFromGreen(rfCanvas);
+    if (!circle) {
+      log('Circle fit failed — could not find green dashed circle', 'error');
+      setStage('circle', 'error');
+      return;
+    }
+    state.rfCanvas = rfCanvas;
+    state.circle = circle;
+    log(`Circle: (${circle.cx.toFixed(1)}, ${circle.cy.toFixed(1)}), r = ${circle.r.toFixed(1)} px, scale = ${circle.scale.toFixed(2)} µm/px (${circle.nGreen} green pixels)`, 'success');
+    setStage('circle', 'done');
+
+    // Stage 3: OCR (single Claude vision API call)
+    setStage('ocr', 'active');
+    const { ocrResult, pieCanvas } = await callOCRAPI(srcCanvas, scale);
+    state.pieCanvas = pieCanvas;
+
+    // Use Claude's eye detection if it disagrees with the heuristic — Claude reads the OS/OD header
+    if (ocrResult.eye && ocrResult.eye !== state.eye) {
+      log(`Eye correction from API: ${state.eye} → ${ocrResult.eye} (header text)`, 'info');
+      state.eye = ocrResult.eye;
+    }
+
+    // Convert clockHours object to internal clockResults format (so the review UI can flag missing values)
+    state.clockResults = {};
+    let okCount = 0;
+    for (let c = 1; c <= 12; c++) {
+      const v = ocrResult.clockHours?.[c] ?? ocrResult.clockHours?.[String(c)];
+      const valid = typeof v === 'number' && v >= 20 && v <= 250;
+      state.clockResults[c] = { value: valid ? Math.round(v) : null, confidence: valid ? 95 : 0 };
+      if (valid) okCount++;
+    }
+    log(`Read ${okCount} / 12 clock-hour values`, okCount === 12 ? 'success' : 'warn');
+
+    state.params = ocrResult.discParams || { RA: null, DA: null, LCDR: null, VCDR: null, CV: null, RPH: null };
+    log(`Disc: RA=${state.params.RA ?? '?'} DA=${state.params.DA ?? '?'} VCDR=${state.params.VCDR ?? '?'}`, 'info');
+
+    state.header = {
+      patientName: ocrResult.patient?.name || null,
+      dob: ocrResult.patient?.dob || null,
+      examDate: ocrResult.patient?.examDate || null,
+      iq: ocrResult.patient?.imageQuality || null
+    };
+    if (state.header.iq) log(`Image quality: ${state.header.iq}`, 'info');
+    if (state.header.patientName) log(`Patient: ${state.header.patientName}`, 'info');
+    if (state.header.examDate) log(`Exam date: ${state.header.examDate}`, 'info');
+
+    setStage('ocr', 'done');
+
+    // Stage 4: Pause for review
+    setStage('review', 'active');
+    populateReviewUI();
+    showSection('review');
+  } catch (err) {
+    // Stringify the error sensibly — Event objects, plain strings, and Error instances all get useful output
+    let msg = err?.message || err?.toString?.() || String(err);
+    if (msg === '[object Event]') msg = 'Image failed to load (browser could not decode the file).';
+    log(`ERROR: ${msg}`, 'error');
+    if (err?.stack) log(err.stack.split('\n').slice(0, 3).join(' | '), 'error');
+    console.error('Pipeline error:', err);
+    document.querySelectorAll('.stage.active').forEach(el => {
+      el.classList.remove('active');
+      el.classList.add('error');
+    });
+  }
+}
+
+function populateReviewUI() {
+  // Clock-hour inputs
+  const clockGrid = $('clock-inputs');
+  clockGrid.innerHTML = '';
+  const clockOrder = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  for (const c of clockOrder) {
+    const r = state.clockResults[c];
+    const item = document.createElement('div');
+    item.className = 'clock-item';
+    const value = r && r.value !== null ? r.value : '';
+    const klass = !r || r.value === null ? 'error-val' : (r.confidence < 70 ? 'warning' : '');
+    item.innerHTML = `
+      <span class="clock-label">${c}</span>
+      <input type="number" min="0" max="300" data-clock="${c}" value="${value}" class="${klass}">
+      <span class="unit">µm</span>
+    `;
+    clockGrid.appendChild(item);
+  }
+
+  // Pie preview
+  const pieCanvas = state.pieCanvas;
+  const pieDisplay = $('pie-preview');
+  pieDisplay.width = pieCanvas.width;
+  pieDisplay.height = pieCanvas.height;
+  pieDisplay.getContext('2d').drawImage(pieCanvas, 0, 0);
+
+  // Eye radio
+  $(`eye-${state.eye.toLowerCase()}`).checked = true;
+
+  // Disc parameters
+  const p = state.params;
+  $('param-RA').value = p.RA?.toFixed(2) || '';
+  $('param-DA').value = p.DA?.toFixed(2) || '';
+  $('param-LCDR').value = p.LCDR ?? '';
+  $('param-VCDR').value = p.VCDR ?? '';
+  $('param-CV').value = p.CV ?? '';
+  $('param-RPH').value = p.RPH ?? '';
+
+  // Patient info
+  const h = state.header;
+  $('param-name').value = h.patientName || '';
+  $('param-dob').value = h.dob || '';
+  $('param-examdate').value = h.examDate || '';
+  $('param-iq').value = h.iq || '';
+}
+
+async function runStage5to6() {
+  try {
+  // Collect reviewed values from form
+  const eye = document.querySelector('input[name="eye"]:checked').value;
+  state.eye = eye;
+
+  const clock = {};
+  let allValid = true;
+  for (let c = 1; c <= 12; c++) {
+    const inp = document.querySelector(`input[data-clock="${c}"]`);
+    const v = parseFloat(inp.value);
+    if (isNaN(v) || v < 1 || v > 300) {
+      inp.classList.add('error-val');
+      allValid = false;
+    } else {
+      clock[c] = v;
+    }
+  }
+  if (!allValid) {
+    alert('Please fill in all 12 clock-hour values (range 1–300 µm).');
+    return;
+  }
+  const S = (clock[11] + clock[12] + clock[1]) / 3;
+  const N = (clock[2] + clock[3] + clock[4]) / 3;
+  const I = (clock[5] + clock[6] + clock[7]) / 3;
+  const T = (clock[8] + clock[9] + clock[10]) / 3;
+  const G = Object.values(clock).reduce((a, b) => a + b, 0) / 12;
+  state.rnfl = { clock, S, N, I, T, G };
+
+  state.params = {
+    RA: parseFloat($('param-RA').value) || null,
+    DA: parseFloat($('param-DA').value) || null,
+    LCDR: parseFloat($('param-LCDR').value) || null,
+    VCDR: parseFloat($('param-VCDR').value) || null,
+    CV: parseFloat($('param-CV').value) || null,
+    RPH: parseFloat($('param-RPH').value) || null
+  };
+  state.header = {
+    patientName: $('param-name').value.trim() || null,
+    dob: $('param-dob').value.trim() || null,
+    examDate: $('param-examdate').value.trim() || null,
+    iq: parseInt($('param-iq').value, 10) || null
+  };
+
+  setStage('review', 'done');
+  showSection('pipeline');
+
+  // Stage 5: Vessel detection
+  setStage('vessels', 'active');
+  await new Promise(r => setTimeout(r, 50));  // let UI update
+
+  const bs = detectBscanShadows(state.srcCanvas, state.scale);
+  log(`B-scan: ${bs.candidates.length} candidates, ${bs.strong.length} ≥15% contrast`, 'info');
+
+  let mode, vessels;
+  if (bs.strong.length >= 4) {
+    mode = 'bscan';
+    log(`B-scan ground truth: ${bs.strong.length} ≥ 4 strong shadows`, 'success');
+
+    // Primary: B-scan vessels
+    vessels = bs.strong.map(s => {
+      const angle = bscanFracToAngle(s.frac, eye);
+      const meas = measureBscanDiameter(bs.colMean, s.idx, bs.W);
+      let dUm = meas ? meas.fwhmPx * bs.arcScale : null;
+      let flag = '';
+      if (dUm > 250) { flag = 'oversized — likely merged with adjacent vessel'; dUm = null; }
+      return {
+        source: 'bscan', frac: s.frac, idx: s.idx, angle,
+        quadrant: angleToQuadrant(angle, eye),
+        dUm, flag,
+        contrast: meas ? meas.contrast : s.contrast
+      };
+    });
+
+    // Supplement: run red-free in parallel and add vessels in regions B-scan missed.
+    // This catches large vessels in thinned-RNFL sectors where B-scan shadows are too weak
+    // to meet the ≥15% threshold.
+    log('Cross-checking red-free for vessels missed by B-scan...', 'info');
+    const rf = detectRedFreeVessels(state.rfCanvas, state.circle);
+    log(`Red-free: ${rf.candidates.length} candidates, ${rf.strong.length} ≥15% contrast`, 'info');
+
+    const ANGLE_TOLERANCE_DEG = 5;  // ±5° (~151 µm arc) — same vessel
+    let supplementCount = 0;
+    for (const c of rf.strong) {
+      const matched = vessels.find(v => {
+        let d = Math.abs(v.angle - c.angle);
+        if (d > 180) d = 360 - d;  // circular distance
+        return d <= ANGLE_TOLERANCE_DEG;
+      });
+      if (matched) continue;  // B-scan already has this vessel — keep B-scan as ground truth
+
+      // Red-free found a vessel B-scan missed — measure with red-free FWHM and add
+      const meas = measureVesselDiameter(state.rfCanvas, state.circle, c.angle);
+      let dUm = null, flag = '';
+      if (meas) {
+        const umPerPx = SCAN_RADIUS_UM / state.circle.r;
+        dUm = meas.fwhmPx * umPerPx;
+        if (meas.contrast < 0.10) { flag = `FWHM contrast ${(meas.contrast*100).toFixed(1)}% <10% — noise, dropped`; dUm = null; }
+        else if (dUm > 250) { flag = 'oversized — likely merged with adjacent vessel'; dUm = null; }
+      }
+      vessels.push({
+        source: 'redfree-supplement', angle: c.angle,
+        quadrant: angleToQuadrant(c.angle, eye),
+        dUm, flag,
+        contrast: meas ? meas.contrast : c.contrast
+      });
+      supplementCount++;
+    }
+
+    // Sort vessels by angle for consistent numbering on the report
+    vessels.sort((a, b) => a.angle - b.angle);
+
+    if (supplementCount > 0) {
+      log(`Added ${supplementCount} red-free vessel(s) in regions B-scan missed (likely thinned RNFL)`, 'warn');
+      mode = 'hybrid';
+    }
+  } else {
+    mode = 'redfree';
+    log(`B-scan unreliable (${bs.strong.length} strong shadows < 4) — falling back to red-free`, 'warn');
+    const rf = detectRedFreeVessels(state.rfCanvas, state.circle);
+    log(`Red-free: ${rf.candidates.length} candidates, ${rf.strong.length} ≥15% contrast`, 'info');
+    vessels = rf.strong.map(c => {
+      const meas = measureVesselDiameter(state.rfCanvas, state.circle, c.angle);
+      let dUm = null, flag = '';
+      if (meas) {
+        const umPerPx = SCAN_RADIUS_UM / state.circle.r;
+        dUm = meas.fwhmPx * umPerPx;
+        if (meas.contrast < 0.10) { flag = `FWHM contrast ${(meas.contrast*100).toFixed(1)}% <10% — noise, dropped`; dUm = null; }
+        else if (dUm > 250) { flag = 'oversized — likely merged with adjacent vessel'; dUm = null; }
+      }
+      return {
+        source: 'redfree', angle: c.angle,
+        quadrant: angleToQuadrant(c.angle, eye),
+        dUm, flag,
+        contrast: meas ? meas.contrast : c.contrast
+      };
+    });
+  }
+  for (const v of vessels) {
+    if (v.dUm !== null) {
+      v.dMin = v.dUm * 0.80; v.dMid = v.dUm; v.dMax = v.dUm * 1.20;
+      v.aMin = Math.PI * (v.dMin / 2) ** 2;
+      v.aMid = Math.PI * (v.dMid / 2) ** 2;
+      v.aMax = Math.PI * (v.dMax / 2) ** 2;
+    }
+  }
+  const usable = vessels.filter(v => v.dUm !== null);
+  log(`Vessels: ${usable.length} usable (${vessels.length - usable.length} excluded)`, 'success');
+  state.vessels = vessels;
+  state.mode = mode;
+  state.bscanInfo = bs;
+  setStage('vessels', 'done');
+
+  // Stage 6: Aggregate + report
+  setStage('report', 'active');
+  state.aggregation = aggregateByQuadrant(vessels, state.rnfl);
+  log(`Per quadrant: S=${state.aggregation.summary.S.n} N=${state.aggregation.summary.N.n} I=${state.aggregation.summary.I.n} T=${state.aggregation.summary.T.n}`, 'info');
+  log(`Global vessel/RNFL: ${state.aggregation.globalPct.toFixed(1)}%`, 'success');
+
+  state.annRf = annotateRedFree(state.rfCanvas, state.circle, vessels, eye);
+  state.annBs = annotateBscan(bs.canvas, vessels, mode, eye);
+
+  setStage('report', 'done');
+  log('Report ready — review below and download', 'success');
+  showResults();
+  } catch (err) {
+    let msg = err?.message || err?.toString?.() || String(err);
+    if (msg === '[object Event]') msg = 'Image processing error (browser event).';
+    log(`ERROR: ${msg}`, 'error');
+    if (err?.stack) log(err.stack.split('\n').slice(0, 3).join(' | '), 'error');
+    console.error('Stage 5/6 error:', err);
+    document.querySelectorAll('.stage.active').forEach(el => {
+      el.classList.remove('active');
+      el.classList.add('error');
+    });
+  }
+}
+
+function aggregateByQuadrant(vessels, rnfl) {
+  const quads = { S: [], N: [], I: [], T: [] };
+  for (const v of vessels) quads[v.quadrant].push(v);
+  const summary = {};
+  for (const q of ['S','N','I','T']) {
+    const usable = quads[q].filter(v => v.dUm !== null);
+    const sumAMid = usable.reduce((s, v) => s + v.aMid, 0);
+    const sumAMin = usable.reduce((s, v) => s + v.aMin, 0);
+    const sumAMax = usable.reduce((s, v) => s + v.aMax, 0);
+    const rnflA = ARC_PER_QUADRANT * rnfl[q];
+    summary[q] = {
+      n: usable.length, nExcluded: quads[q].length - usable.length,
+      rnflThick: rnfl[q], rnflA,
+      sumAMin, sumAMid, sumAMax,
+      pctMid: rnflA > 0 ? (sumAMid / rnflA) * 100 : 0,
+      pctMin: rnflA > 0 ? (sumAMin / rnflA) * 100 : 0,
+      pctMax: rnflA > 0 ? (sumAMax / rnflA) * 100 : 0
+    };
+  }
+  const totA = ['S','N','I','T'].reduce((s, q) => s + summary[q].sumAMid, 0);
+  const totRA = ['S','N','I','T'].reduce((s, q) => s + summary[q].rnflA, 0);
+  return { summary, totA, totRA, globalPct: totRA > 0 ? (totA / totRA) * 100 : 0 };
+}
+
+function showResults() {
+  showSection('results');
+  // Metrics
+  const m = $('metrics');
+  m.innerHTML = '';
+  const usableVessels = state.vessels.filter(v => v.dUm !== null).length;
+  const supplementCount = state.vessels.filter(v => v.source === 'redfree-supplement').length;
+  const methodLabel = state.mode === 'bscan' ? 'B-scan'
+                    : state.mode === 'hybrid' ? 'Hybrid'
+                    : 'Red-free';
+  const methodNote = state.mode === 'bscan' ? 'ground truth'
+                   : state.mode === 'hybrid' ? `B-scan + ${supplementCount} red-free suppl.`
+                   : 'fallback (low IQ)';
+  const cards = [
+    { label: 'Eye', value: state.eye },
+    { label: 'Image Quality', value: state.header.iq || '—', note: state.header.iq && state.header.iq < 55 ? 'low' : 'acceptable' },
+    { label: 'Vessels detected', value: usableVessels, note: methodLabel },
+    { label: 'RNFL global', value: state.rnfl.G.toFixed(0), unit: 'µm', note: state.rnfl.G < 75 ? 'severely thinned' : state.rnfl.G < 90 ? 'low-normal' : 'normal' },
+    { label: 'VCDR', value: state.params.VCDR ?? '—', note: state.params.VCDR > 0.7 ? 'elevated' : '' },
+    { label: 'Disc area', value: state.params.DA?.toFixed(2) ?? '—', unit: 'mm²', note: state.params.DA && state.params.DA < 1.7 ? 'small disc' : '' },
+    { label: 'Vessel/RNFL', value: state.aggregation.globalPct.toFixed(1), unit: '%' },
+    { label: 'Method', value: methodLabel, note: methodNote }
+  ];
+  for (const c of cards) {
+    const el = document.createElement('div');
+    el.className = 'metric';
+    el.innerHTML = `<div class="label">${c.label}</div><div class="value">${c.value}${c.unit ? `<span class="unit">${c.unit}</span>` : ''}</div>${c.note ? `<div class="note">${c.note}</div>` : ''}`;
+    m.appendChild(el);
+  }
+
+  let caveatHTML = '';
+  if (state.mode === 'redfree') {
+    caveatHTML = `<div class="caveat"><strong>⚠ Methodology caveat</strong>B-scan vessel-shadow detection didn't meet the ≥15% contrast threshold (4+ vessels needed). Vessel positions and diameters use the red-free image as a fallback. Diameter estimates from red-free systematically run larger than B-scan FWHM, so absolute %RNFL values are not directly comparable to B-scan-derived reports.</div>`;
+  } else if (state.mode === 'hybrid') {
+    const supp = state.vessels.filter(v => v.source === 'redfree-supplement');
+    const suppQuads = [...new Set(supp.map(v => v.quadrant))].sort().join(', ');
+    caveatHTML = `<div class="caveat"><strong>⚠ Mixed-method detection</strong>${supp.length} vessel(s) added from red-free in regions where B-scan shadow contrast fell below 15% — typically due to local RNFL thinning (sectors: ${suppQuads}). These vessels are tagged "redfree-supplement" in the table; their diameters use red-free FWHM (which runs systematically larger than B-scan FWHM), while B-scan ground-truth vessels keep their B-scan FWHM measurements. The two methods are not directly comparable, but combining them captures vessels that pure B-scan would miss in atrophic sectors.</div>`;
+  }
+  $('caveat-container').innerHTML = caveatHTML;
+
+  const rfDisp = $('rf-canvas');
+  rfDisp.width = state.annRf.width; rfDisp.height = state.annRf.height;
+  rfDisp.getContext('2d').drawImage(state.annRf, 0, 0);
+  $('rf-meta').textContent = `${state.eye} · ${(SCAN_RADIUS_UM/state.circle.r).toFixed(2)} µm/px`;
+
+  const bsDisp = $('bs-canvas');
+  bsDisp.width = state.annBs.width; bsDisp.height = state.annBs.height;
+  bsDisp.getContext('2d').drawImage(state.annBs, 0, 0);
+  $('bs-meta').textContent = `${state.bscanInfo.W} × ${state.bscanInfo.H} px · ${state.bscanInfo.arcScale.toFixed(2)} µm/px arc`;
+
+  renderTables();
+}
+
+function renderTables() {
+  const order = [12,1,2,3,4,5,6,7,8,9,10,11];
+  const quadOf = {12:'S',1:'S',2:'N',3:'N',4:'N',5:'I',6:'I',7:'I',8:'T',9:'T',10:'T',11:'S'};
+  let html = '<table><thead><tr><th>Clock</th>';
+  for (const c of order) html += `<th class="num-col">${c}</th>`;
+  html += '</tr></thead><tbody><tr><td>Quadrant</td>';
+  for (const c of order) html += `<td class="num-col"><span class="badge-${quadOf[c]}">${quadOf[c]}</span></td>`;
+  html += '</tr><tr><td>RNFL (µm)</td>';
+  for (const c of order) {
+    const v = state.rnfl.clock[c];
+    const cls = v < 60 ? 'thickness-red' : v < 75 ? 'thickness-yellow' : 'thickness-green';
+    html += `<td class="num-col"><span class="thickness-cell ${cls}">${v}</span></td>`;
+  }
+  html += '</tr></tbody></table>';
+  $('clock-table').innerHTML = html;
+
+  const names = {S:'Superior',N:'Nasal',I:'Inferior',T:'Temporal'};
+  let qh = '<table><thead><tr><th>Quadrant</th><th class="num-col">Vessels</th><th class="num-col">RNFL (µm)</th><th class="num-col">RNFL Area (µm²)</th><th class="num-col">Vessel Area (µm²)</th><th class="num-col">Range</th><th class="num-col">% RNFL</th></tr></thead><tbody>';
+  for (const q of ['S','N','I','T']) {
+    const s = state.aggregation.summary[q];
+    const vL = s.nExcluded > 0 ? `${s.n} (+${s.nExcluded} excl)` : `${s.n}`;
+    qh += `<tr><td><span class="badge-${q}">${names[q]} (${q})</span></td><td class="num-col">${vL}</td><td class="num-col">${s.rnflThick.toFixed(0)}</td><td class="num-col">${s.rnflA.toFixed(0)}</td><td class="num-col">${s.sumAMid.toFixed(0)}</td><td class="num-col">${s.sumAMin.toFixed(0)} – ${s.sumAMax.toFixed(0)}</td><td class="num-col"><strong>${s.pctMid.toFixed(1)}%</strong></td></tr>`;
+  }
+  const totV = ['S','N','I','T'].reduce((sum,q) => sum + state.aggregation.summary[q].n, 0);
+  qh += `<tr style="background: var(--bg-card); font-weight: 600;"><td>Global</td><td class="num-col">${totV}</td><td class="num-col">${state.rnfl.G.toFixed(0)}</td><td class="num-col">${state.aggregation.totRA.toFixed(0)}</td><td class="num-col">${state.aggregation.totA.toFixed(0)}</td><td></td><td class="num-col"><strong>${state.aggregation.globalPct.toFixed(1)}%</strong></td></tr></tbody></table>`;
+  $('quad-table').innerHTML = qh;
+
+  let vh = '<table><thead><tr><th>#</th><th>Sector</th><th>Method</th><th class="num-col">Angle</th><th class="num-col">Diameter (µm)</th><th class="num-col">Range</th><th class="num-col">Area (µm²)</th><th>Status</th></tr></thead><tbody>';
+  let i = 0;
+  for (const v of state.vessels) {
+    i++;
+    const ok = v.dUm !== null;
+    const methodLabel = v.source === 'bscan' ? 'B-scan'
+                      : v.source === 'redfree-supplement' ? '<span style="color:var(--warn)">red-free suppl.</span>'
+                      : 'red-free';
+    vh += `<tr><td><strong>${i}</strong></td><td><span class="badge-${v.quadrant}">${names[v.quadrant]} (${v.quadrant})</span></td><td>${methodLabel}</td><td class="num-col">${v.angle.toFixed(1)}°</td><td class="num-col">${ok ? '<strong>'+v.dMid.toFixed(0)+'</strong>' : '—'}</td><td class="num-col">${ok ? v.dMin.toFixed(0)+' – '+v.dMax.toFixed(0) : '—'}</td><td class="num-col">${ok ? v.aMid.toFixed(0) : '—'}</td><td>${ok ? (v.contrast*100).toFixed(1)+'% contrast' : '<span style="color:var(--bad)">EXCLUDED — '+v.flag+'</span>'}</td></tr>`;
+  }
+  vh += '</tbody></table>';
+  $('vessel-table').innerHTML = vh;
+}
+
+
+// =====================================================================
+// DOCX generation — calls /api/docx (server-side) so no client library needed
+// =====================================================================
+async function generateDocx() {
+  try {
+    log('Building DOCX report on server...', 'info');
+
+    // Serialize annotated images to base64
+    const [annRfPngB64, annBsPngB64] = await Promise.all([
+      canvasToBase64(state.annRf),
+      canvasToBase64(state.annBs)
+    ]);
+
+    // Strip non-serializable fields from state.bscanInfo before sending
+    const payload = {
+      eye: state.eye,
+      mode: state.mode,
+      rnfl: state.rnfl,
+      params: state.params,
+      header: state.header,
+      vessels: state.vessels,
+      aggregation: state.aggregation,
+      circle: { r: state.circle.r, scale: state.circle.scale, cx: state.circle.cx, cy: state.circle.cy },
+      annRfPngB64,
+      annBsPngB64,
+      annRfDim: { width: state.annRf.width, height: state.annRf.height },
+      annBsDim: { width: state.annBs.width, height: state.annBs.height }
+    };
+
+    const res = await fetch('/api/docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`DOCX API ${res.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const blob = await res.blob();
+    const fname = `OCT_${state.eye}_${(state.header.patientName || 'patient').replace(/[^a-zA-Z0-9]/g,'_').substring(0,30)}_${(state.header.examDate || '').replace(/\//g,'-')}.docx`;
+
+    // Browser-native download — no FileSaver dependency
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    log(`Downloaded: ${fname}`, 'success');
+  } catch (err) {
+    let msg = err?.message || String(err);
+    log(`ERROR: ${msg}`, 'error');
+    console.error('DOCX generation error:', err);
+    alert(`Failed to generate DOCX: ${msg}`);
+  }
+}
+
+// =====================================================================
+// Event handlers
+// =====================================================================
+
+// Global error capture — visible in the on-screen console if something fails
+window.addEventListener('error', e => {
+  if (consoleEl) {
+    log(`UNCAUGHT ERROR: ${e.message} (${e.filename}:${e.lineno})`, 'error');
+    showSection('pipeline');
+  }
+});
+window.addEventListener('unhandledrejection', e => {
+  if (consoleEl) {
+    log(`UNCAUGHT PROMISE REJECTION: ${e.reason?.message || e.reason}`, 'error');
+    showSection('pipeline');
+  }
+});
+
+// Startup diagnostics — surface dependency and binding problems visibly
+function startupCheck() {
+  const issues = [];
+  if (typeof window.URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+    issues.push('Browser does not support URL.createObjectURL (try a different browser)');
+  }
+  if (location.protocol === 'file:') {
+    issues.push('Opened via file:// — the API endpoints will not work. Use the hosted URL.');
+  }
+  if (issues.length > 0) {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background: #5a1a1a; color: #ffcccc; padding: 16px 24px; margin: 16px 0; border-radius: 6px; border-left: 4px solid #c97676; font-size: 13px; line-height: 1.6;';
+    banner.innerHTML = '<strong style="display:block; margin-bottom:8px; font-size:14px;">⚠ Startup issues detected — the app may not work correctly:</strong><ul style="margin:0; padding-left:20px;">' +
+      issues.map(i => `<li>${i}</li>`).join('') +
+      '</ul><p style="margin-top:10px; color:#ffd0d0;">Press F12 → Console for detailed errors.</p>';
+    document.querySelector('.app').insertBefore(banner, document.querySelector('header').nextSibling);
+  }
+}
+
+// Bind listeners with try/catch so a binding error surfaces visibly
+function bindEventListeners() {
+  try {
+    $('dropzone').addEventListener('click', () => $('file-input').click());
+    $('file-input').addEventListener('change', e => {
+      if (e.target.files.length > 0) runStage1to3(e.target.files[0]);
+    });
+    $('dropzone').addEventListener('dragover', e => { e.preventDefault(); $('dropzone').classList.add('dragging'); });
+    $('dropzone').addEventListener('dragleave', () => $('dropzone').classList.remove('dragging'));
+    $('dropzone').addEventListener('drop', e => {
+      e.preventDefault();
+      $('dropzone').classList.remove('dragging');
+      if (e.dataTransfer.files.length > 0) runStage1to3(e.dataTransfer.files[0]);
+    });
+    $('confirm-review').addEventListener('click', () => runStage5to6());
+    $('cancel-review').addEventListener('click', () => {
+      state = {};
+      showSection('drop');
+      $('file-input').value = '';
+    });
+    $('reset-btn').addEventListener('click', () => {
+      state = {};
+      showSection('drop');
+      $('file-input').value = '';
+    });
+    $('download-btn').addEventListener('click', () => generateDocx());
+  } catch (err) {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background: #5a1a1a; color: #ffcccc; padding: 16px 24px; margin: 16px 0; border-radius: 6px; border-left: 4px solid #c97676; font-size: 13px;';
+    banner.innerHTML = `<strong>⚠ Failed to bind event handlers:</strong> ${err.message}. The app cannot respond to clicks. Press F12 → Console for details.`;
+    document.querySelector('.app').insertBefore(banner, document.querySelector('header').nextSibling);
+  }
+}
+
+// Run on next tick so any pending CDN script tags finish executing first
+setTimeout(() => {
+  startupCheck();
+  bindEventListeners();
+}, 0);
+</script>
+</body>
+</html>

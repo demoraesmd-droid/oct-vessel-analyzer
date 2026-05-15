@@ -1,0 +1,9 @@
+{
+  "name": "oct-vessel-analyzer",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "docx": "9.0.3"
+  }
+}
